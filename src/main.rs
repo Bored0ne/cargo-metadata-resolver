@@ -1,48 +1,24 @@
-mod fetch_metadata;
+mod cdp;
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::process::Command;
-use serde::Deserialize;
-use crate::fetch_metadata::Metadata;
-
-#[derive(Deserialize, Debug)]
-struct CargoFile {
-    dependencies: BTreeMap<String, DepValue>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum DepValue {
-    String(String),
-    DepShape(DepShape),
-}
-
-#[derive(Debug, Deserialize)]
-struct DepShape {
-    version: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct PackageInfo {
-    description: Option<String>,
-    authors: Option<Vec<String>>,
-}
+use cdp::models;
+use cdp::fetch_metadata;
 
 fn main() {
     let contents = fs::read_to_string("./Cargo.toml")
         .expect("Should have been able to read the file");
 
-    let cargo_file: CargoFile = toml::from_str(&contents).unwrap();
-    let mut dataset: Vec<Metadata> = vec![];
+    let cargo_file: models::CargoFile = toml::from_str(&contents).unwrap();
+    let mut dataset: Vec<models::Metadata> = vec![];
 
     for (name, dep_value) in cargo_file.dependencies {
         match dep_value {
-            DepValue::String(version) => {
+            models::DepValue::String(version) => {
                 // println!("Package: {} Version: {}", name, version);
                 dataset.push(fetch_package_info(&name, &version));
             }
-            DepValue::DepShape(dep_shape) => {
+            models::DepValue::DepShape(dep_shape) => {
                 // println!("Package: {} Version: {}", name, dep_shape.version);
                 dataset.push(fetch_package_info(&name, &dep_shape.version));
             }
@@ -51,11 +27,12 @@ fn main() {
     println!("{}", serde_json::to_string(&dataset).expect("Failed to serialize object"));
 }
 
-fn fetch_package_info(package_name: &str, version: &str) -> Metadata {
+fn fetch_package_info(package_name: &str, version: &str) -> models::Metadata {
     let output = Command::new("cargo")
         .args(&[
             "metadata",
             "--format-version=1",
+            "--no-deps",
             "--locked", // Use the locked version specified in Cargo.lock
         ])
         .output()
@@ -63,7 +40,7 @@ fn fetch_package_info(package_name: &str, version: &str) -> Metadata {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let cargo_metadata: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let mut metadata = Metadata {
+    let mut metadata = models::Metadata {
         name: package_name.to_string(),
         version: version.to_string(),
         authors: "".to_string(),
@@ -81,11 +58,11 @@ fn fetch_package_info(package_name: &str, version: &str) -> Metadata {
             })
         })
         .map(|package| {
-            serde_json::from_value::<PackageInfo>(package.clone()).unwrap()
+            serde_json::from_value::<models::PackageInfo>(package.clone()).unwrap()
         });
 
     if let Some(package) = package_info {
-        metadata = fetch_metadata::fetch_metadata(&package_name.to_string(), &version.to_string());
+        metadata = fetch_metadata(&package_name.to_string(), &version.to_string());
         metadata.description = package.description.unwrap_or_else(|| "".to_string());
         metadata.authors = package.authors.unwrap_or_else(Vec::new)
             .iter()
