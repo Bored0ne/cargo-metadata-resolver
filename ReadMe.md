@@ -1,4 +1,5 @@
-# Cargo-Metadata-Resolver
+# Cargo-Metadata-Resolver 
+[![Rust](https://github.com/Bored0ne/cargo-metadata-resolver/actions/workflows/rust.yml/badge.svg)](https://github.com/Bored0ne/cargo-metadata-resolver/actions/workflows/rust.yml)
 
 ## Description
 This is an executable designed to get you the current package's metadata in json format. This was a "learn how to rust" project for me so don't expect a large amount of updates/improvements.

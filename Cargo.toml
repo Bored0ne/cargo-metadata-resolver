@@ -1,7 +1,13 @@
 [package]
 name = "cargo-metadata-resolver"
+authors = "Stephen Seaton <stephen@seatoncode.com>"
+description = "This is an executable designed to get you the current package's metadata in json format. This was a \"learn how to rust\" project for me so don't expect a large amount of updates/improvements."
 version = "0.1.1"
 edition = "2021"
+repository = "https://github.com/Bored0ne/cargo-metadata-resolver"
+readme = "ReadMe.md"
+license = "Beerware"
+keywords = ["cargo", "metadata", "resolver", "json"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
