@@ -1,34 +1,17 @@
 mod cdp;
 
-use std::fs;
 use std::process::Command;
 use cdp::models;
 use cdp::fetch_metadata;
+use crate::models::{Metadata, PackageInfo};
 
 fn main() {
-    let contents = fs::read_to_string("./Cargo.toml")
-        .expect("Should have been able to read the file");
-
-    let cargo_file: models::CargoFile = toml::from_str(&contents).unwrap();
-    let mut dataset: Vec<models::Metadata> = vec![];
-
-    for (name, dep_value) in cargo_file.dependencies {
-        match dep_value {
-            models::DepValue::String(version) => {
-                // println!("Package: {} Version: {}", name, version);
-                dataset.push(fetch_package_info(&name, &version));
-            }
-            models::DepValue::DepShape(dep_shape) => {
-                // println!("Package: {} Version: {}", name, dep_shape.version);
-                dataset.push(fetch_package_info(&name, &dep_shape.version));
-            }
-        }
-    }
+    let dataset = fetch_package_info();
     println!("{}", serde_json::to_string(&dataset).expect("Failed to serialize object"));
 }
 
-fn fetch_package_info(package_name: &str, version: &str) -> models::Metadata {
-    let output = Command::new("cargo")
+fn fetch_package_info() -> Vec<Metadata> {
+    let current_installation_metadata = Command::new("cargo")
         .args(&[
             "metadata",
             "--format-version=1",
@@ -38,37 +21,52 @@ fn fetch_package_info(package_name: &str, version: &str) -> models::Metadata {
         .output()
         .expect("Failed to execute 'cargo' command");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8_lossy(&current_installation_metadata.stdout);
     let cargo_metadata: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    let mut metadata = models::Metadata {
-        name: package_name.to_string(),
-        version: version.to_string(),
-        authors: "".to_string(),
-        publish_date: "".to_string(),
-        description: "".to_string(),
-    };
 
-    // Extract the package information for the specific version from the cargo metadata
-    let package_info = cargo_metadata["packages"]
+    let full_installation_metadata = Command::new("cargo")
+        .args(&[
+            "metadata",
+            "--format-version=1",
+            "--locked", // Use the locked version specified in Cargo.lock
+        ])
+        .output()
+        .expect("Failed to execute 'cargo' command");
+
+    let full_installation_stdout = String::from_utf8_lossy(&full_installation_metadata.stdout);
+    let full_cargo_metadata: serde_json::Value = serde_json::from_str(&full_installation_stdout).unwrap();
+
+    let mut collection: Vec<Metadata> = Vec::new();
+
+    for package in cargo_metadata["packages"].as_array().unwrap_or(&vec![]) {
+        let deps = package.get("dependencies").expect("There weren't any dependencies");
+        for item in deps.as_array().unwrap_or(&vec![]) {
+            let package_info = serde_json::from_value::<models::PackageInfo>(item.clone()).unwrap();
+            let full_package_info = get_package_info_for_name(&full_cargo_metadata, &package_info.name.clone().unwrap().to_string());
+            let mut metadata = fetch_metadata(&package_info.name.clone().unwrap().to_string(), &full_package_info.version.unwrap());
+            metadata.description = full_package_info.description.unwrap_or_else(|| "".to_string());
+            metadata.authors = full_package_info.authors.unwrap_or_else(Vec::new)
+                .iter()
+                .map(|author| author.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+            collection.push(metadata);
+        }
+    }
+
+    collection
+}
+
+fn get_package_info_for_name(full_metadata: &serde_json::Value, name: &String) -> PackageInfo {
+    full_metadata["packages"]
         .as_array()
         .and_then(|packages| {
             packages.iter().find(|package| {
-                package["name"].as_str().unwrap_or("") == package_name
-                    && package["version"].as_str().unwrap_or("") == version
+                package["name"].as_str().unwrap_or("") == name
             })
         })
         .map(|package| {
-            serde_json::from_value::<models::PackageInfo>(package.clone()).unwrap()
-        });
-
-    if let Some(package) = package_info {
-        metadata = fetch_metadata(&package_name.to_string(), &version.to_string());
-        metadata.description = package.description.unwrap_or_else(|| "".to_string());
-        metadata.authors = package.authors.unwrap_or_else(Vec::new)
-            .iter()
-            .map(|author| author.clone())
-            .collect::<Vec<_>>()
-            .join(", ");
-    }
-    return metadata;
+            serde_json::from_value::<PackageInfo>(package.clone()).unwrap()
+        })
+        .unwrap()
 }
