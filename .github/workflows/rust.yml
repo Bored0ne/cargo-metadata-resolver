@@ -3,8 +3,6 @@ name: Rust
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -21,12 +19,9 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
       - name: cargo-auto-publish
-        on:
-          push:
-            branches: [ "main" ]
-          # You may pin to the exact commit or the version.
-          # uses: seunlanlege/cargo-auto-publish@12dfb09b683d500a97e239c169d033c8a5809321
-          uses: seunlanlege/cargo-auto-publish@2
-          with:
-            # space de-limited paths to Cargo.toml files of crates you want to auto-publish
-            toml: # optional
+        # You may pin to the exact commit or the version.
+        # uses: seunlanlege/cargo-auto-publish@12dfb09b683d500a97e239c169d033c8a5809321
+        uses: seunlanlege/cargo-auto-publish@2
+        with:
+          # space de-limited paths to Cargo.toml files of crates you want to auto-publish
+          toml: # optional
